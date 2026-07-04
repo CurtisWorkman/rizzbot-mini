@@ -37,7 +37,7 @@ enum ControlMode {
   CONTROL_AUTO
 };
 
-volatile ControlMode controlMode = CONTROL_MANUAL;
+volatile ControlMode controlMode = CONTROL_AUTO;
 
 /* ================= RANDOM MODE (for auto control) ================= */
 enum RandomMode {
@@ -46,7 +46,7 @@ enum RandomMode {
   RANDOM_NORMAL
 };
 
-volatile RandomMode randomMode = RANDOM_NORMAL;
+volatile RandomMode randomMode = RANDOM_SOFT;
 
 /* ================= MOTOR CONTROL ================= */
 void motorControl(byte c) {
@@ -74,10 +74,15 @@ void motorControl(byte c) {
       break;
   }
 }
+/* ================= AUTO MOTOR (duty-cycle based) ================= */
+void MOTOR(byte c, int dutyPercent, int totalMs) {
+  const int periodMs = 20;                 // one PWM cycle length
+  dutyPercent = constrain(dutyPercent, 0, 100);
+  int tOn  = (periodMs * dutyPercent) / 100;
+  int tOff = periodMs - tOn;
+  int cycles = totalMs / periodMs; 
 
-/* ================= AUTO MOTOR (with PWM timing) ================= */
-void MOTOR(byte c,int t1,int t2,int Time){
-  for(int i=0;i<Time;i++){
+  for (int i = 0; i < cycles; i++) {
     switch (c) {
       case 0: digitalWrite(LF,LOW); digitalWrite(LB,LOW); digitalWrite(RF,LOW); digitalWrite(RB,LOW); break;
       case 1: digitalWrite(LF,LOW); digitalWrite(LB,HIGH);digitalWrite(RF,LOW); digitalWrite(RB,HIGH);break;
@@ -90,12 +95,12 @@ void MOTOR(byte c,int t1,int t2,int Time){
       case 8: digitalWrite(LF,LOW); digitalWrite(LB,LOW); digitalWrite(RF,HIGH);digitalWrite(RB,LOW); break;
     }
 
-    delay(t1);
+    if (tOn > 0) delay(tOn);
 
     digitalWrite(LF,LOW); digitalWrite(LB,LOW);
     digitalWrite(RF,LOW); digitalWrite(RB,LOW);
 
-    delay(t2);
+    if (tOff > 0) delay(tOff);
   }
 }
 
@@ -345,7 +350,7 @@ void setupServer() {
     controlMode = CONTROL_MANUAL;
     motorControl(0); // Stop motors when switching to manual
     soundPlayer.stopSequencing(); // Stop auto sound sequences
-    soundPlayer.setVolume(30);
+    soundPlayer.setVolume(15);
     server.send(200); 
   });
   
@@ -424,7 +429,7 @@ void setRobotMood(RandomMode mode) {
       soundPlayer.stopSequencing();
       break;
     case RANDOM_SOFT:
-      roboEyes.setMood(HAPPY);
+      roboEyes.setMood(DEFAULT);
       roboEyes.setHeight(30,30); 
       roboEyes.setCuriosity(false);
       roboEyes.setAutoblinker(ON,3,2);
@@ -432,7 +437,7 @@ void setRobotMood(RandomMode mode) {
       soundPlayer.stopSequencing();
       break;
     case RANDOM_NORMAL:
-      roboEyes.setMood(DEFAULT);
+      roboEyes.setMood(HAPPY);
       roboEyes.setHeight(30,30); 
       roboEyes.setCuriosity(false);
       roboEyes.setAutoblinker(ON,3,2);
@@ -453,7 +458,7 @@ void setup() {
   display.clearDisplay(); display.display();
 
   roboEyes.begin(SCREEN_WIDTH,SCREEN_HEIGHT,100);
-  setRobotMood(RANDOM_NORMAL);
+  setRobotMood(RANDOM_SOFT);
 
   randomSeed(esp_random());
 
@@ -462,7 +467,7 @@ void setup() {
     Serial.println(F("Failed to initialize voice module!"));
   }
 
-  soundPlayer.enableDebug(true);
+  soundPlayer.enableDebug(false);
   
   soundPlayer.setSequenceInterval(10000);
   soundPlayer.setSoundDelayRange(80, 600);
@@ -492,13 +497,13 @@ void loop() {
       lastTick = millis();
 
       if (randomMode == RANDOM_SOFT) {
-        if (random(120) == 1) {
-          MOTOR(random(9), random(6,18), random(40,90), 1);
+        if (random(60) == 1) {
+          MOTOR(random(9), random(30,60), random(50,600));   // dir, duty%, total ms
         }
       }
       else if (randomMode == RANDOM_NORMAL) {
-        if (random(100) == 1) {
-          MOTOR(random(9), random(5,50), random(10,100), random(20));
+        if (random(30) == 1) {
+          MOTOR(random(9), random(65,100), random(300,4000));
         }
       }
     }
